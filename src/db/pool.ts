@@ -3,7 +3,7 @@ import { logger } from '../lib/logger.js';
 
 const connectionString = process.env['DATABASE_URL'];
 if (!connectionString) {
-  throw new Error('Missing DATABASE_URL environment variable');
+  logger.warn('DATABASE_URL is not set; database operations may fail until it is configured');
 }
 
 export const pool = new Pool({

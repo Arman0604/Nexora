@@ -11,6 +11,8 @@ import membersRouter from './routes/members.js';
 import expensesRouter from './routes/expenses.js';
 import settlementsRouter from './routes/settlements.js';
 import balancesRouter from './routes/balances.js';
+import paymentRouter from './routes/payments.js';
+import webhookRouter from './routes/webhooks.js';
 import { optionalAuth } from './middleware/auth.js';
 import { userRateLimit } from './middleware/rateLimit.js';
 
@@ -20,6 +22,8 @@ export function createApp(): express.Application {
   app.use(helmet());
   app.use(cors());
   app.use(compression());
+
+  app.use('/api/v1/webhooks', webhookRouter);
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -35,6 +39,7 @@ export function createApp(): express.Application {
   app.use('/api/v1/groups/:groupId/expenses', expensesRouter);
   app.use('/api/v1/groups/:groupId/settlements', settlementsRouter);
   app.use('/api/v1/groups/:groupId/balances', balancesRouter);
+  app.use('/api/v1/groups/:groupId/payments', paymentRouter);
   app.use(healthRouter);
   app.use(errorHandler);
 

@@ -2,11 +2,12 @@ import Redis from 'ioredis';
 import { logger } from '../lib/logger.js';
 
 const redisUrl = process.env['REDIS_URL'];
-if (!redisUrl) {
-  throw new Error('Missing REDIS_URL environment variable');
+const isRedisConfigured = Boolean(redisUrl);
+if (!isRedisConfigured) {
+  logger.warn('REDIS_URL is not set; Redis-backed features will be unavailable');
 }
 
-export const redis = new Redis(redisUrl, {
+export const redis = new Redis(redisUrl ?? 'redis://127.0.0.1:6379', {
   maxRetriesPerRequest: 3,
   retryStrategy(times) {
     const delay = Math.min(times * 200, 5000);
@@ -29,9 +30,17 @@ redis.on('close', () => {
 });
 
 export async function connectRedis(): Promise<void> {
+  if (!isRedisConfigured) {
+    return;
+  }
+
   await redis.connect();
 }
 export async function disconnectRedis(): Promise<void> {
+  if (!isRedisConfigured) {
+    return;
+  }
+
   logger.info('Disconnecting Redis...');
   await redis.quit();
   logger.info('Redis disconnected');

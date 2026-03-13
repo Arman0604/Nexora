@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { validateEnvironment } from './lib/envCheck.js';
 import { logger } from './lib/logger.js';
 import { createApp } from './app.js';
 import { pool, closePool } from './db/pool.js';
@@ -9,6 +10,8 @@ import {
 } from './queue/settlementQueue.js';
 
 async function main(): Promise<void> {
+  validateEnvironment();
+
   try {
     await pool.query('SELECT 1');
     logger.info('PostgreSQL connected');

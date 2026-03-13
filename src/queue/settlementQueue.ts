@@ -31,11 +31,13 @@ interface ParticipantNode {
 }
 
 const redisUrl = process.env['REDIS_URL'];
-if (!redisUrl) {
-  throw new Error('Missing REDIS_URL environment variable');
+const isRedisConfigured = Boolean(redisUrl);
+
+if (!isRedisConfigured) {
+  logger.warn('REDIS_URL is not set; settlement optimization queue/cache is disabled');
 }
 
-const parsedRedisUrl = new URL(redisUrl);
+const parsedRedisUrl = new URL(redisUrl ?? 'redis://127.0.0.1:6379/0');
 const redisConnection = {
   host: parsedRedisUrl.hostname,
   port: parsedRedisUrl.port ? parseInt(parsedRedisUrl.port, 10) : 6379,
@@ -45,14 +47,20 @@ const redisConnection = {
   tls: parsedRedisUrl.protocol === 'rediss:' ? {} : undefined,
 };
 
-const queue = new Queue<OptimizationJobData, void, OptimizationJobName>(QUEUE_NAME, {
-  connection: redisConnection,
-  defaultJobOptions: {
-    removeOnComplete: true,
-    removeOnFail: 100,
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 1000 },
-  },
+const queue = isRedisConfigured
+  ? new Queue<OptimizationJobData, void, OptimizationJobName>(QUEUE_NAME, {
+    connection: redisConnection,
+    defaultJobOptions: {
+      removeOnComplete: true,
+      removeOnFail: 100,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+    },
+  })
+  : null;
+
+queue?.on('error', (err) => {
+  logger.error({ err }, 'BullMQ Queue error');
 });
 
 export function getSettlementPlanCacheKey(groupId: string): string {
@@ -159,11 +167,15 @@ async function processOptimizationJob(job: Job<OptimizationJobData>): Promise<vo
 let worker: Worker<OptimizationJobData, void, OptimizationJobName> | null = null;
 
 export async function enqueueSettlementOptimization(groupId: string): Promise<void> {
+  if (!queue) {
+    return;
+  }
+
   await queue.add(
     'recalculate',
     { groupId },
     {
-      jobId: `group:${groupId}`,
+      jobId: `group-${groupId}`,
       removeOnComplete: true,
       removeOnFail: 100,
     },
@@ -171,6 +183,10 @@ export async function enqueueSettlementOptimization(groupId: string): Promise<vo
 }
 
 export async function getCachedSettlementPlan(groupId: string): Promise<SettlementPlanItem[] | null> {
+  if (!isRedisConfigured) {
+    return null;
+  }
+
   const raw = await redis.get(getSettlementPlanCacheKey(groupId));
   if (!raw) {
     return null;
@@ -185,6 +201,10 @@ export async function getCachedSettlementPlan(groupId: string): Promise<Settleme
 }
 
 export function startSettlementOptimizationWorker(): Worker<OptimizationJobData, void, OptimizationJobName> {
+  if (!isRedisConfigured) {
+    throw new AppError('Settlement optimization worker unavailable without REDIS_URL', 503);
+  }
+
   if (worker) {
     return worker;
   }
