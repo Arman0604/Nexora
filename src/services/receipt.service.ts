@@ -4,8 +4,15 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env.js';
 import { ParsedReceipt, ReceiptScanResult } from '../types/receipt.types.js';
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+let genAIClient: GoogleGenerativeAI | null = null;
+
+function getGeminiClient(): GoogleGenerativeAI | null {
+  if (!env.GEMINI_API_KEY) return null;
+  if (!genAIClient) {
+    genAIClient = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+  }
+  return genAIClient;
+}
 
 
 const RECEIPT_PROMPT = `You are a receipt data extraction assistant. 
@@ -66,6 +73,15 @@ export async function scanReceipt(
   imageBuffer: Buffer,
   mimeType: string
 ): Promise<ReceiptScanResult> {
+  const genAI = getGeminiClient();
+  if (!genAI) {
+    return {
+      success: false,
+      data: null,
+      error: 'Receipt scanning is not configured. Set GEMINI_API_KEY in backend environment variables.',
+    };
+  }
+
   const base64Image = imageBuffer.toString('base64');
   let lastError: Error | null = null;
 
